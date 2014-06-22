@@ -6,12 +6,20 @@
 #include <cmath>
 #include <cstdio>
 
-//#include <mpi.h>
+#include <mkl.h>
 
 #include "linalg.h"
 #include "operators.h"
 #include "stats.h"
 #include "data.h"
+
+extern "C" {
+	double cblas_ddot (const MKL_INT N, const double *X, const MKL_INT incX, const double *Y, const MKL_INT incY);
+	double cblas_dnrm2 (const MKL_INT N, const double *X, const MKL_INT incX);
+	void cblas_daxpy (const MKL_INT N, const double alpha, const double *X, const MKL_INT incX, double *Y, const MKL_INT incY);
+	void cblas_dcopy (const MKL_INT N, const double *X, const MKL_INT incX, double *Y, const MKL_INT incY);
+};
+
 
 namespace linalg {
 
@@ -54,25 +62,14 @@ void cg_init(int nx, int ny)
 // x and y are vectors on length N
 double ss_dot(Field const& x, Field const& y, const int N)
 {
-    double result = 0;
-	#pragma omp parallel for reduction(+:result)
-    for (int i = 0; i < N; i++)
-        result += x[i] * y[i];
-
-    return result;
+	return cblas_ddot (N, &x[0], 1, &y[0], 1);
 }
 
 // computes the 2-norm of x
 // x is a vector on length N
 double ss_norm2(Field const& x, const int N)
 {
-    double result = 0;
-
-	#pragma omp parallel for reduction(+:result)
-    for (int i = 0; i < N; i++)
-        result += x[i] * x[i];
-
-    return sqrt(result);
+	return cblas_dnrm2(N, &x[0], 1);
 }
 
 // sets entries in a vector to value
@@ -94,9 +91,7 @@ void ss_fill(Field& x, const double value, const int N)
 // alpha is a scalar
 void ss_axpy(Field& y, const double alpha, Field const& x, const int N)
 {
-	#pragma omp parallel for
-    for (int i = 0; i < N; i++)
-        y[i] += alpha * x[i];
+	cblas_daxpy (N, alpha, &x[0], 1, &y[0], 1);
 }
 
 // computes y = x + alpha*(l-r)
@@ -146,9 +141,7 @@ void ss_lcomb(Field& y, const double alpha, Field& x, const double beta,
 // x and y are vectors of length N
 void ss_copy(Field& y, Field const& x, const int N)
 {
-	#pragma omp parallel for
-    for (int i = 0; i < N; i++)
-        y[i] = x[i];
+	cblas_dcopy (N, &x[0], 1, &y[0], 1);
 }
 
 // conjugate gradient solver

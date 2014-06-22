@@ -1,5 +1,9 @@
+MKL=/opt/intel/mkl
 CXX=icc
-CXXFLAGS=-O3 -openmp -mmic
+CXXFLAGS=-DMKL_ILP64 -openmp -mmic -vec-report -O3
+IFLAGS=-I$(MKL)/include
+LDFLAGS=-L$(MKL)/lib/mic -lmkl_intel_ilp64 -lmkl_core -lmkl_intel_thread -lpthread -lm
+
 
 SOURCES = stats.cpp data.cpp operators.cpp linalg.cpp
 HEADERS = stats.h   data.h   operators.h   linalg.h
@@ -22,7 +26,7 @@ linalg.o: linalg.cpp linalg.h
 	$(CXX) $(CXXFLAGS) $(IFLAGS) -c linalg.cpp -o linalg.o
 
 main: $(OBJ) main.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) *.o main.cpp -o main
+	$(CXX) $(CXXFLAGS) *.o main.cpp -o main ${LDFLAGS}
 
 clean:
 	rm -f main
