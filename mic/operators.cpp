@@ -10,6 +10,8 @@
 #include "operators.h"
 #include "stats.h"
 #include <stdio.h>
+#include <tbb/parallel_for.h>
+#include <tbb/blocked_range2d.h>
 
 namespace operators {
 
@@ -35,41 +37,22 @@ namespace operators {
         return(_mm512_castsi512_pd(_mm512_mask_blend_epi64(255-85, iv1, _mm512_permute4f128_epi32(iv1, _MM_PERM_ADCB))));
     }
 
+    struct Diffusion {
+        const data::Field &U;
+        data::Field &S;
+        const __m512d veccoeff;
+        const __m512d vecalpha;
+        const __m512d vec1;
+        const __m512d vecdxs;
+        const int ivecend;
+        const int iend;
+        Diffusion(const data::Field &_U, data::Field &_S, const __m512d _veccoeff, const __m512d _vecalpha, const __m512d _vec1, const __m512d _vecdxs, int _ivecend, int _iend): U(_U), S(_S), veccoeff(_veccoeff), vecalpha(_vecalpha), vec1(_vec1), vecdxs(_vecdxs), ivecend(_ivecend), iend(_iend) {};
 
+        void operator()( const tbb::blocked_range2d<int, int>& range ) const {
+            using data::x_old;
 
-    void diffusion(const data::Field &U, data::Field &S)
-    {
-        using data::options;
-
-        using data::bndE;
-        using data::bndW;
-        using data::bndN;
-        using data::bndS;
-
-        using data::x_old;
-
-        double dxs = 1000. * (options.dx * options.dx);
-        double alpha = options.alpha;
-        int nx = options.nx;
-        int ny = options.ny;
-        int iend  = nx - 1;
-        int jend  = ny - 1;
-
-        __m512d veccoeff = _mm512_set1_pd(-(4.0 + alpha));
-        __m512d vecalpha = _mm512_set1_pd( alpha);
-        __m512d vec1 = _mm512_set1_pd(1.0);
-        __m512d vecdxs = _mm512_set1_pd(dxs);
-
-        // the interior grid points
-        #pragma omp parallel
-        {
-            #pragma unroll
-            #pragma omp for nowait
-            for (int j=1; j < jend; j++) {
-                //Calculate the number of vectorized iterations
-                int ivecend = (iend + 7) / 8;
-                #pragma unroll
-                for (int ivec = 0; ivec < ivecend; ivec++){
+            for(int j = range.rows().begin(); j != range.rows().end(); j++)
+                for (int ivec = range.cols().begin(); ivec != range.cols().end(); ivec++) {
                     // i = (ivec * 8 + 8) : (ivec * 8 + 17)
                     int i = 8 * ivec; 
                     //==============================================
@@ -97,9 +80,41 @@ namespace operators {
                         _mm512_store_pd((void *)(&S(i,j)), res);
                     if (ivec == ivecend)
                         _mm512_mask_store_pd((void *)(&S(i,j)),(1 << (iend - 8 * ivec)) - 1, res);
-                }
-            }
 
+                }
+        }
+    };
+
+
+    void diffusion(const data::Field &U, data::Field &S)
+    {
+        using data::options;
+
+        using data::bndE;
+        using data::bndW;
+        using data::bndN;
+        using data::bndS;
+
+        using data::x_old;
+
+        double dxs = 1000. * (options.dx * options.dx);
+        double alpha = options.alpha;
+        int nx = options.nx;
+        int ny = options.ny;
+        int iend  = nx - 1;
+        int jend  = ny - 1;
+
+        const __m512d veccoeff = _mm512_set1_pd(-(4.0 + alpha));
+        const __m512d vecalpha = _mm512_set1_pd( alpha);
+        const __m512d vec1 = _mm512_set1_pd(1.0);
+        const __m512d vecdxs = _mm512_set1_pd(dxs);
+
+        // the interior grid points
+        int ivecend = (iend + 7) / 8;
+        tbb::parallel_for(tbb::blocked_range2d<int, int>(1, jend, 0, ivecend), Diffusion(U, S, veccoeff, vecalpha, vec1, vecdxs, ivecend, iend));
+
+        #pragma omp parallel
+        {
             // the east boundary
             {
                 int i = nx - 1;

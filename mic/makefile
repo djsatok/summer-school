@@ -1,5 +1,6 @@
 CXX=icc
 CXXFLAGS=-O3 -openmp -mmic -g -debug inline-debug-info -shared-intel -opt-streaming-stores always -opt-streaming-cache-evict=0 -opt-prefetch-distance64,8
+LIBS=-ltbb
 
 SOURCES = stats.cpp data.cpp operators.cpp linalg.cpp
 HEADERS = stats.h   data.h   operators.h   linalg.h
@@ -22,7 +23,7 @@ linalg.o: linalg.cpp linalg.h
 	$(CXX) $(CXXFLAGS) $(IFLAGS) -c linalg.cpp -o linalg.o
 
 main: $(OBJ) main.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) *.o main.cpp -o main
+	$(CXX) $(CXXFLAGS) $(LIBS) *.o main.cpp -o main
 
 clean:
 	rm -f main
